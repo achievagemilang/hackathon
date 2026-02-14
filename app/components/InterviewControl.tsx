@@ -148,20 +148,49 @@ export default function InterviewControl() {
           <div className="w-full max-w-2xl min-h-[120px] text-center">
             {phase === 'listening' && (
               <div className="fade-in-up">
-                <p className="text-xs uppercase tracking-wider text-zinc-500 mb-3">
-                  Your Response
-                </p>
-                <p className="text-2xl lg:text-3xl text-zinc-100 leading-relaxed font-light">
-                  {liveTranscript || (
-                    <span className="text-zinc-600">Start speaking...</span>
+                <div className="flex items-center justify-center gap-3 mb-3">
+                  <p className="text-xs uppercase tracking-wider text-zinc-500">
+                    Your Response
+                  </p>
+                  {liveTranscript.wordCount > 0 && (
+                    <span className="px-2 py-0.5 text-xs font-mono bg-accent/20 text-accent rounded-full border border-accent/30">
+                      {liveTranscript.wordCount} {liveTranscript.wordCount === 1 ? 'word' : 'words'}
+                    </span>
                   )}
-                </p>
+                </div>
+                <div className="max-h-[40vh] overflow-y-auto scrollbar-thin px-4">
+                  <p className="text-2xl lg:text-3xl leading-relaxed font-light text-left">
+                    {liveTranscript.final || liveTranscript.interim ? (
+                      <>
+                        <span className="text-zinc-100">{liveTranscript.final}</span>
+                        {liveTranscript.interim && (
+                          <span className="text-zinc-500"> {liveTranscript.interim}</span>
+                        )}
+                        <span className="inline-block w-0.5 h-8 bg-accent ml-1 animate-pulse" />
+                      </>
+                    ) : (
+                      <span className="text-zinc-600">Start speaking...</span>
+                    )}
+                  </p>
+                </div>
               </div>
             )}
             {phase === 'processing' && (
-              <div className="flex flex-col items-center gap-3">
-                <div className="w-8 h-8 border-2 border-accent border-t-transparent rounded-full animate-spin" />
-                <p className="text-zinc-400 text-lg">Analyzing your response...</p>
+              <div className="fade-in-up">
+                <p className="text-xs uppercase tracking-wider text-zinc-500 mb-3">
+                  Your Response
+                </p>
+                {state.transcript && (
+                  <div className="max-h-[40vh] overflow-y-auto scrollbar-thin px-4 mb-6">
+                    <p className="text-lg lg:text-xl text-zinc-500 italic leading-relaxed text-left">
+                      "{state.transcript}"
+                    </p>
+                  </div>
+                )}
+                <div className="flex flex-col items-center gap-3">
+                  <div className="w-8 h-8 border-2 border-accent border-t-transparent rounded-full animate-spin" />
+                  <p className="text-zinc-400 text-lg">Analyzing your response...</p>
+                </div>
               </div>
             )}
             {phase === 'speaking' && history.length > 0 && (

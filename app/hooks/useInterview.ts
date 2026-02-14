@@ -4,7 +4,7 @@ import { calculateWPM, playAudio, speak, stopAudio } from '@/app/lib/speech';
 import type { APIResponse, AnalysisMetrics, InterviewState } from '@/types';
 import { EMPTY_METRICS } from '@/types';
 import { useCallback, useReducer, useRef } from 'react';
-import { useSpeechRecognition } from './useSpeechRecognition';
+import { useSpeechRecognition, type LiveTranscript } from './useSpeechRecognition';
 
 // ─── State Machine ───────────────────────────────────────────
 
@@ -85,7 +85,7 @@ export function useInterview() {
   const [state, dispatch] = useReducer(reducer, initialState);
   const {
     isListening,
-    transcript,
+    liveTranscript,
     startListening,
     stopListening,
     isSupported,
@@ -252,7 +252,7 @@ export function useInterview() {
   return {
     state,
     /** Live transcript from the STT engine (updates in real-time) */
-    liveTranscript: transcript,
+    liveTranscript,
     isListening,
     isSupported,
     startInterview,

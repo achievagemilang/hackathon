@@ -7,11 +7,21 @@ interface SpeechResult {
   duration: number;
 }
 
+/** Structured live transcript with final/interim separation */
+export interface LiveTranscript {
+  /** Text the browser has finalized (high confidence, won't change) */
+  final: string;
+  /** Text the browser is still processing (may change with next onresult) */
+  interim: string;
+  /** Total word count (final + interim) */
+  wordCount: number;
+}
+
 interface UseSpeechRecognitionReturn {
   /** Whether the browser is currently listening */
   isListening: boolean;
-  /** The live transcript of the current utterance */
-  transcript: string;
+  /** Structured live transcript with final/interim separation */
+  liveTranscript: LiveTranscript;
   /** Start listening. Resolves with transcript and duration when speech ends. */
   startListening: () => Promise<SpeechResult>;
   /** Manually stop listening. */
@@ -24,7 +34,11 @@ interface UseSpeechRecognitionReturn {
 
 export function useSpeechRecognition(): UseSpeechRecognitionReturn {
   const [isListening, setIsListening] = useState(false);
-  const [transcript, setTranscript] = useState('');
+  const [liveTranscript, setLiveTranscript] = useState<LiveTranscript>({
+    final: '',
+    interim: '',
+    wordCount: 0,
+  });
   const [speechDuration, setSpeechDuration] = useState(0);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const startTimeRef = useRef<number>(0);
@@ -58,7 +72,7 @@ export function useSpeechRecognition(): UseSpeechRecognitionReturn {
 
       recognition.onstart = () => {
         setIsListening(true);
-        setTranscript('');
+        setLiveTranscript({ final: '', interim: '', wordCount: 0 });
         startTimeRef.current = Date.now();
       };
 
@@ -75,7 +89,11 @@ export function useSpeechRecognition(): UseSpeechRecognitionReturn {
           }
         }
 
-        setTranscript(finalTranscript + interim);
+        // Calculate word count from combined text
+        const combined = (finalTranscript + interim).trim();
+        const wordCount = combined ? combined.split(/\s+/).length : 0;
+
+        setLiveTranscript({ final: finalTranscript, interim, wordCount });
       };
 
       recognition.onend = () => {
@@ -110,7 +128,7 @@ export function useSpeechRecognition(): UseSpeechRecognitionReturn {
 
   return {
     isListening,
-    transcript,
+    liveTranscript,
     startListening,
     stopListening,
     isSupported,

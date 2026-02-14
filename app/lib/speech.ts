@@ -1,24 +1,12 @@
 'use client';
 
-// ─── Voice preloading ────────────────────────────────────────
-// Some browsers (Chrome) load voices asynchronously.
-// We listen for the voiceschanged event to cache them.
-let cachedVoices: SpeechSynthesisVoice[] = [];
-
-function loadVoices(): SpeechSynthesisVoice[] {
-  if (typeof window === 'undefined' || !window.speechSynthesis) return [];
-  cachedVoices = window.speechSynthesis.getVoices();
-  return cachedVoices;
-}
-
-if (typeof window !== 'undefined' && window.speechSynthesis) {
-  loadVoices();
-  window.speechSynthesis.addEventListener('voiceschanged', loadVoices);
-}
-
 /**
  * Speak text using the browser's SpeechSynthesis API.
  * Returns a Promise that resolves when speech finishes.
+ *
+ * RACE CONDITION HANDLING (per SKILLS.md):
+ * - Always call this AFTER stopListening() is complete
+ * - Always wait for this to resolve before calling startListening() again
  */
 export function speak(text: string): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -36,8 +24,8 @@ export function speak(text: string): Promise<void> {
     utterance.volume = 1.0;
     utterance.lang = 'en-US';
 
-    // Use cached voices (handles async loading)
-    const voices = cachedVoices.length > 0 ? cachedVoices : loadVoices();
+    // Try to pick a natural-sounding voice
+    const voices = window.speechSynthesis.getVoices();
     const preferred = voices.find(
       (v) =>
         v.name.includes('Samantha') ||
@@ -58,6 +46,10 @@ export function speak(text: string): Promise<void> {
 /**
  * Play an audio file (e.g., thinking filler).
  * Returns a Promise that resolves when playback finishes.
+ *
+ * LATENCY MASKING (per SKILLS.md):
+ * - Trigger immediately when silence detected
+ * - Stop when API response arrives
  */
 let currentAudio: HTMLAudioElement | null = null;
 
@@ -98,6 +90,7 @@ export function stopAudio(): void {
 
 /**
  * Calculate words per minute from a transcript and speech duration.
+ * CLIENT-SIDE ONLY (OpenAI doesn't know speech duration).
  * @param transcript - The spoken text
  * @param durationSeconds - How long the user spoke (in seconds)
  * @returns WPM as an integer

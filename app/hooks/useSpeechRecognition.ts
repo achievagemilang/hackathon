@@ -24,21 +24,21 @@ export function useSpeechRecognition(): UseSpeechRecognitionReturn {
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const startTimeRef = useRef<number>(0);
 
-  const SpeechRecognitionAPI =
+  const SpeechRecognition =
     typeof window !== 'undefined'
       ? window.SpeechRecognition || window.webkitSpeechRecognition
       : null;
 
-  const isSupported = !!SpeechRecognitionAPI;
+  const isSupported = !!SpeechRecognition;
 
   const startListening = useCallback((): Promise<string> => {
     return new Promise((resolve, reject) => {
-      if (!SpeechRecognitionAPI) {
+      if (!SpeechRecognition) {
         reject(new Error('SpeechRecognition not supported in this browser.'));
         return;
       }
 
-      const recognition = new SpeechRecognitionAPI();
+      const recognition = new SpeechRecognition();
       recognitionRef.current = recognition;
 
       recognition.continuous = true;
@@ -90,7 +90,7 @@ export function useSpeechRecognition(): UseSpeechRecognitionReturn {
 
       recognition.start();
     });
-  }, [SpeechRecognitionAPI]);
+  }, [SpeechRecognition]);
 
   const stopListening = useCallback(() => {
     if (recognitionRef.current) {

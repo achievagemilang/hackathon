@@ -69,6 +69,7 @@ export function useSpeechRecognition(): UseSpeechRecognitionReturn {
       recognition.lang = 'en-US';
 
       let finalTranscript = '';
+      let lastInterim = '';
 
       recognition.onstart = () => {
         setIsListening(true);
@@ -89,6 +90,9 @@ export function useSpeechRecognition(): UseSpeechRecognitionReturn {
           }
         }
 
+        // Store the last interim text in case user manually stops
+        lastInterim = interim;
+
         // Calculate word count from combined text
         const combined = (finalTranscript + interim).trim();
         const wordCount = combined ? combined.split(/\s+/).length : 0;
@@ -101,7 +105,11 @@ export function useSpeechRecognition(): UseSpeechRecognitionReturn {
         setSpeechDuration(duration);
         setIsListening(false);
         recognitionRef.current = null;
-        resolve({ transcript: finalTranscript, duration });
+        
+        // Combine final transcript with any remaining interim text
+        // This ensures manually stopped speech includes the last spoken words
+        const completeTranscript = (finalTranscript + ' ' + lastInterim).trim();
+        resolve({ transcript: completeTranscript, duration });
       };
 
       recognition.onerror = (event: SpeechRecognitionErrorEvent) => {

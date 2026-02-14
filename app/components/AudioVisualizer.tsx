@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useRef, useEffect } from 'react';
 
 interface Props {
   isActive: boolean;
@@ -52,7 +52,6 @@ export default function AudioVisualizer({ isActive }: Props) {
       audioCtx?.close();
       analyserRef.current = null;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isActive]);
 
   const drawIdle = () => {
@@ -110,7 +109,7 @@ export default function AudioVisualizer({ isActive }: Props) {
       ctx.lineTo(width, height / 2);
       ctx.stroke();
 
-      // Glow effect
+      // Glow effect (mirror aesthetic per SKILLS.md)
       ctx.shadowBlur = 15;
       ctx.shadowColor = '#3b82f6';
       ctx.stroke();
@@ -122,13 +121,13 @@ export default function AudioVisualizer({ isActive }: Props) {
 
   return (
     <div
-      className={`w-full max-w-lg ${isActive ? 'listening-glow' : ''} rounded-2xl p-1`}
+      className={`w-full max-w-lg ${isActive ? 'listening-glow' : ''} rounded-2xl p-1 backdrop-blur-sm`}
     >
       <canvas
         ref={canvasRef}
         width={500}
         height={100}
-        className='w-full h-24 rounded-xl bg-zinc-900/50'
+        className="w-full h-24 rounded-xl bg-zinc-900/50"
       />
     </div>
   );

@@ -11,9 +11,9 @@ import { useSpeechRecognition } from './useSpeechRecognition';
 type Action =
   | { type: 'START_LISTENING' }
   | { type: 'UPDATE_TRANSCRIPT'; transcript: string }
-  | { type: 'START_PROCESSING' }
+  | { type: 'START_PROCESSING'; transcript: string }
   | { type: 'START_SPEAKING' }
-  | { type: 'RECEIVE_RESPONSE'; reply: string; analysis: AnalysisMetrics }
+  | { type: 'RECEIVE_RESPONSE'; reply: string; analysis: AnalysisMetrics; isOpening?: boolean }
   | { type: 'FINISH_SPEAKING' }
   | { type: 'SET_ERROR'; error: string }
   | { type: 'RESET' };
@@ -41,7 +41,7 @@ function reducer(state: InterviewState, action: Action): InterviewState {
         phase: 'processing',
         history: [
           ...state.history,
-          { role: 'user', content: state.transcript },
+          { role: 'user', content: action.transcript },
         ],
       };
 
@@ -49,7 +49,8 @@ function reducer(state: InterviewState, action: Action): InterviewState {
       return {
         ...state,
         stats: action.analysis,
-        allStats: [...state.allStats, action.analysis],
+        // Don't pollute allStats with opening question (isOpening flag)
+        allStats: action.isOpening ? state.allStats : [...state.allStats, action.analysis],
         history: [
           ...state.history,
           { role: 'assistant', content: action.reply },
@@ -91,6 +92,10 @@ export function useInterview() {
     speechDuration,
   } = useSpeechRecognition();
   const isRunningRef = useRef(false);
+  const historyRef = useRef(state.history);
+
+  // Keep historyRef in sync with state.history to avoid stale closures
+  historyRef.current = state.history;
 
   /**
    * Run one full loop iteration:
@@ -104,14 +109,18 @@ export function useInterview() {
    * - stopListening() is called automatically by browser when speech ends
    * - We await startListening() completion before proceeding to step 2
    * - We await speak() completion before returning to step 1
+   * - We check isRunningRef after each await to bail out if endInterview() was called
    */
   const runLoop = useCallback(async () => {
     // ── Step 1: Listen (RACE CONDITION: Wait for listening to complete) ──
     dispatch({ type: 'START_LISTENING' });
 
     let finalTranscript: string;
+    let duration: number;
     try {
-      finalTranscript = await startListening(); // Blocks until speech ends
+      const result = await startListening(); // Blocks until speech ends
+      finalTranscript = result.transcript;
+      duration = result.duration;
     } catch (err) {
       dispatch({
         type: 'SET_ERROR',
@@ -120,31 +129,44 @@ export function useInterview() {
       return;
     }
 
+    // Bail out if interview was ended during listening
+    if (!isRunningRef.current) return;
+
     // If the user said nothing, prompt them
     if (!finalTranscript.trim()) {
       dispatch({ type: 'UPDATE_TRANSCRIPT', transcript: '' });
-      dispatch({ type: 'START_PROCESSING' });
+      dispatch({ type: 'START_PROCESSING', transcript: '' });
       finalTranscript = "(The user was silent and didn't respond.)";
+      duration = 0;
     } else {
       dispatch({ type: 'UPDATE_TRANSCRIPT', transcript: finalTranscript });
-      dispatch({ type: 'START_PROCESSING' });
+      dispatch({ type: 'START_PROCESSING', transcript: finalTranscript });
     }
 
     // ── Step 2: Filler audio (non-blocking, for latency masking) ──
     playAudio('/audio/thinking.mp3');
 
-    // ── Step 3: Call API ──
+    // ── Step 3: Call API (use historyRef to avoid stale closure) ──
     try {
+      // Truncate history to last 10 messages to avoid token limit issues
+      const recentHistory = historyRef.current.slice(-10);
+      
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           messages: [
-            ...state.history,
+            ...recentHistory,
             { role: 'user', content: finalTranscript },
           ],
         }),
       });
+
+      // Bail out if interview was ended during API call
+      if (!isRunningRef.current) {
+        stopAudio();
+        return;
+      }
 
       if (!res.ok) {
         const err = await res.json();
@@ -153,8 +175,8 @@ export function useInterview() {
 
       const data: APIResponse = await res.json();
 
-      // ── Step 4: Update metrics (client-side WPM) ──
-      const wpm = calculateWPM(finalTranscript, speechDuration);
+      // ── Step 4: Update metrics (client-side WPM using captured duration) ──
+      const wpm = calculateWPM(finalTranscript, duration);
       const analysis: AnalysisMetrics = {
         ...data.analysis,
         pacing_wpm: wpm,
@@ -168,6 +190,9 @@ export function useInterview() {
 
       await speak(data.reply); // Wait for speaking to finish before returning to step 1
 
+      // Bail out if interview was ended during speaking
+      if (!isRunningRef.current) return;
+
       dispatch({ type: 'FINISH_SPEAKING' });
     } catch (err) {
       stopAudio();
@@ -176,7 +201,7 @@ export function useInterview() {
         error: err instanceof Error ? err.message : 'Something went wrong',
       });
     }
-  }, [startListening, state.history, speechDuration]);
+  }, [startListening]);
 
   /**
    * Start the interview session.
@@ -189,11 +214,12 @@ export function useInterview() {
 
     dispatch({ type: 'RESET' });
 
-    // Speak the opening question
+    // Speak the opening question (mark as opening to avoid polluting allStats)
     dispatch({
       type: 'RECEIVE_RESPONSE',
       reply: OPENING_QUESTION,
       analysis: EMPTY_METRICS,
+      isOpening: true,
     });
     dispatch({ type: 'START_SPEAKING' });
 

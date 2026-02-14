@@ -1,14 +1,19 @@
 'use client';
 
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
+
+interface SpeechResult {
+  transcript: string;
+  duration: number;
+}
 
 interface UseSpeechRecognitionReturn {
   /** Whether the browser is currently listening */
   isListening: boolean;
   /** The live transcript of the current utterance */
   transcript: string;
-  /** Start listening. Resolves with the final transcript when speech ends. */
-  startListening: () => Promise<string>;
+  /** Start listening. Resolves with transcript and duration when speech ends. */
+  startListening: () => Promise<SpeechResult>;
   /** Manually stop listening. */
   stopListening: () => void;
   /** Whether the browser supports SpeechRecognition */
@@ -24,14 +29,18 @@ export function useSpeechRecognition(): UseSpeechRecognitionReturn {
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const startTimeRef = useRef<number>(0);
 
-  const SpeechRecognition =
-    typeof window !== 'undefined'
-      ? window.SpeechRecognition || window.webkitSpeechRecognition
-      : null;
+  // Memoize SpeechRecognition to avoid re-evaluation on every render
+  const SpeechRecognition = useMemo(
+    () =>
+      typeof window !== 'undefined'
+        ? window.SpeechRecognition || window.webkitSpeechRecognition
+        : null,
+    []
+  );
 
   const isSupported = !!SpeechRecognition;
 
-  const startListening = useCallback((): Promise<string> => {
+  const startListening = useCallback((): Promise<SpeechResult> => {
     return new Promise((resolve, reject) => {
       if (!SpeechRecognition) {
         reject(new Error('SpeechRecognition not supported in this browser.'));
@@ -74,15 +83,16 @@ export function useSpeechRecognition(): UseSpeechRecognitionReturn {
         setSpeechDuration(duration);
         setIsListening(false);
         recognitionRef.current = null;
-        resolve(finalTranscript);
+        resolve({ transcript: finalTranscript, duration });
       };
 
       recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
         setIsListening(false);
         recognitionRef.current = null;
+        const duration = (Date.now() - startTimeRef.current) / 1000;
         // "no-speech" is not a real error — user just didn't say anything
         if (event.error === 'no-speech') {
-          resolve('');
+          resolve({ transcript: '', duration });
         } else {
           reject(new Error(`Speech recognition error: ${event.error}`));
         }

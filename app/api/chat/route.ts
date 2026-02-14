@@ -1,6 +1,6 @@
-import type { APIResponse, AnalysisMetrics, Message } from '@/types';
 import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
+import type { Message, APIResponse } from '@/types';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -36,32 +36,17 @@ BEHAVIOR RULES:
 
 NOTE: The "pacing_wpm" field should always be 0 — it is calculated client-side.`;
 
-const VALID_TONES = ['professional', 'uncertain', 'casual', 'aggressive'];
-
-/**
- * Clamp a value to a given range. Returns 0 if not a valid number.
- */
-function clampScore(value: unknown, min: number, max: number): number {
-  if (typeof value !== 'number' || isNaN(value)) return 0;
-  return Math.max(min, Math.min(max, Math.round(value)));
-}
-
-/**
- * Validate and sanitize the analysis metrics from OpenAI.
- * Ensures all values are within expected ranges.
- */
-function sanitizeAnalysis(raw: Record<string, unknown>): AnalysisMetrics {
-  return {
-    confidence_score: clampScore(raw.confidence_score, 0, 100),
-    pacing_wpm: 0, // Always 0 — calculated client-side
-    clarity_score: clampScore(raw.clarity_score, 0, 100),
-    tone: VALID_TONES.includes(raw.tone as string)
-      ? (raw.tone as AnalysisMetrics['tone'])
-      : 'professional',
-    feedback_text:
-      typeof raw.feedback_text === 'string' ? raw.feedback_text : '',
-  };
-}
+// Fallback response for error handling (per SKILLS.md)
+const FALLBACK_RESPONSE: APIResponse = {
+  reply: "I'm having trouble processing that. Could you try rephrasing your answer?",
+  analysis: {
+    confidence_score: 50,
+    pacing_wpm: 0,
+    clarity_score: 50,
+    tone: 'professional',
+    feedback_text: 'Take a moment to organize your thoughts before responding.',
+  },
+};
 
 export async function POST(request: NextRequest) {
   try {
@@ -92,41 +77,28 @@ export async function POST(request: NextRequest) {
     const content = completion.choices[0]?.message?.content;
 
     if (!content) {
-      return NextResponse.json(
-        { error: 'No response from OpenAI' },
-        { status: 502 },
-      );
+      console.error('[/api/chat] No content in OpenAI response');
+      return NextResponse.json(FALLBACK_RESPONSE);
     }
 
     // Parse and validate the JSON
-    const parsed = JSON.parse(content);
+    const parsed: APIResponse = JSON.parse(content);
 
-    // Basic structure validation
+    // Basic validation
     if (typeof parsed.reply !== 'string' || !parsed.analysis) {
-      return NextResponse.json(
-        { error: 'Invalid response structure from OpenAI' },
-        { status: 502 },
-      );
+      console.error('[/api/chat] Invalid response structure from OpenAI:', parsed);
+      return NextResponse.json(FALLBACK_RESPONSE);
     }
 
-    // Sanitize and validate all metric values
-    const response: APIResponse = {
-      reply: parsed.reply,
-      analysis: sanitizeAnalysis(parsed.analysis),
-    };
-
-    return NextResponse.json(response);
+    return NextResponse.json(parsed);
   } catch (error: unknown) {
     console.error('[/api/chat] Error:', error);
 
+    // Return fallback response instead of error (per SKILLS.md - never crash UI)
     if (error instanceof SyntaxError) {
-      return NextResponse.json(
-        { error: 'OpenAI returned invalid JSON' },
-        { status: 502 },
-      );
+      console.error('[/api/chat] OpenAI returned invalid JSON');
     }
 
-    const message = error instanceof Error ? error.message : 'Unknown error';
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json(FALLBACK_RESPONSE);
   }
 }

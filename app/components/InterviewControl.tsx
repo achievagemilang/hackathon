@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect } from 'react';
 import { useInterview } from '@/app/hooks/useInterview';
 import AudioVisualizer from './AudioVisualizer';
 import Dashboard from './Dashboard';
@@ -18,6 +19,16 @@ export default function InterviewControl() {
 
   const { phase, history, stats, allStats, error } = state;
   const isActive = phase !== 'idle';
+
+  // Auto-dismiss error toast after 5 seconds
+  useEffect(() => {
+    if (error) {
+      const timer = setTimeout(() => {
+        // Error will be cleared automatically on next START_LISTENING via reducer
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [error]);
 
   // ─── Not supported fallback ──────────────────────────────
   if (!isSupported) {
@@ -164,6 +175,15 @@ export default function InterviewControl() {
               </div>
             )}
           </div>
+
+          {/* Mobile compact metrics bar (visible only on mobile during active interview) */}
+          {stats.confidence_score > 0 && (
+            <div className="lg:hidden w-full max-w-2xl grid grid-cols-3 gap-3 mt-6">
+              <CompactMetric label="Confidence" value={stats.confidence_score} max={100} />
+              <CompactMetric label="Clarity" value={stats.clarity_score} max={100} />
+              <CompactMetric label="Pacing" value={stats.pacing_wpm} unit="wpm" />
+            </div>
+          )}
         </div>
 
         {/* Right: Dashboard (hidden on mobile when active) */}
@@ -199,6 +219,30 @@ function SummaryCard({
       <p className="text-3xl font-bold">
         {value}{' '}
         <span className="text-base font-normal text-zinc-500">{unit}</span>
+      </p>
+    </div>
+  );
+}
+
+// Compact metric card for mobile view during active interview
+function CompactMetric({
+  label,
+  value,
+  max,
+  unit,
+}: {
+  label: string;
+  value: number;
+  max?: number;
+  unit?: string;
+}) {
+  return (
+    <div className="bg-zinc-900/80 border border-zinc-800 rounded-lg p-3 text-center backdrop-blur-sm">
+      <p className="text-xs text-zinc-500 mb-1">{label}</p>
+      <p className="text-lg font-semibold">
+        {value}
+        {unit && <span className="text-xs text-zinc-500 ml-1">{unit}</span>}
+        {max && <span className="text-xs text-zinc-500">/{max}</span>}
       </p>
     </div>
   );

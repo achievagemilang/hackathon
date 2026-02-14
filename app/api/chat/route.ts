@@ -60,6 +60,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Validate each message has required fields
+    for (const msg of messages) {
+      if (!msg.role || !msg.content || typeof msg.content !== 'string') {
+        return NextResponse.json(
+          { error: 'Invalid message format: role and content required' },
+          { status: 400 },
+        );
+      }
+    }
+
     // Prepend system prompt
     const fullMessages = [
       { role: 'system' as const, content: SYSTEM_PROMPT },
